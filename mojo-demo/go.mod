@@ -1,6 +1,6 @@
 module mojo-demo
 
-go 1.23.6
+go 1.20
 
 require (
 	github.com/bytedance/sonic v1.11.6 // indirect

@@ -1,6 +1,6 @@
 # Mojo Demo
 
-This is a Go project template.
+This is a demo for the Mojo project. It's a simple web server that displays the current, voltage and temperature of the attached Notecard.
 
 ## Getting Started
 
@@ -8,7 +8,7 @@ This is a Go project template.
 2. Run the application:
 
 ```bash
-go run cmd/main.go
+balena build . -d raspberrypi5 -A aarch64
 ```
 
 ## Project Structure

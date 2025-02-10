@@ -10,10 +10,11 @@ import (
 )
 
 type DataPoint struct {
-	Timestamp     int64   `json:"timestamp"`
-	MilliampHours float64 `json:"milliamp_hours"`
-	Voltage       float64 `json:"voltage"`
-	Temperature   float64 `json:"temperature"`
+	Timestamp        int64   `json:"timestamp"`
+	MilliampHours    float64 `json:"milliamp_hours"`
+	Voltage          float64 `json:"voltage"`
+	Temperature      float64 `json:"temperature"`
+	BatteryChemistry string  `json:"battery_chemistry"`
 }
 
 var (

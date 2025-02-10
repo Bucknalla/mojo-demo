@@ -1,17 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Device Power Monitor</title>
+    <title>Notecard Power Monitor</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
     <link href="https://api.fontshare.com/v2/css?f[]=atkinson-hyperlegible@400,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Device Power Monitor</h1>
-            <div class="description">Real-time monitoring of device power consumption using Mojo</div>
+            <h1>Notecard Energy Monitoring</h1>
+            <div class="description">Real-time monitoring of device power consumption using Mojo.</div>
         </div>
 
         <div class="chart-container">
@@ -29,6 +30,6 @@
         <div id="status">Waiting for data...</div>
     </div>
 
-    <script src="/static/js/chart.js"></script>
+    <script type="module" src="/static/js/chart.js"></script>
 </body>
 </html>
