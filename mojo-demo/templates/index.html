@@ -7,29 +7,34 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
     <link href="https://api.fontshare.com/v2/css?f[]=atkinson-hyperlegible@400,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="icon" href="/static/images/favicon.ico">
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Notecard Energy Monitoring</h1>
+            <div id="usb-alert" class="usb-alert hidden">
+                <img src="/static/images/warning.svg" alt="Warning" width="24" height="24">
+                <span>USB Disconnected!</span>
+            </div>
             <div class="description">Real-time monitoring of device power consumption using Mojo.</div>
         </div>
 
-        <div class="chart-container">
-            <canvas id="mAhChart"></canvas>
-        </div>
-
-        <div class="chart-container">
-            <canvas id="voltageChart"></canvas>
-        </div>
-
-        <div class="chart-container">
-            <canvas id="temperatureChart"></canvas>
+        <div class="chart-wrapper">
+            <div class="chart-container">
+                <canvas id="mAhChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="voltageChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="temperatureChart"></canvas>
+            </div>
         </div>
 
         <div id="status">Waiting for data...</div>
     </div>
 
-    <script type="module" src="/static/js/chart.js"></script>
 </body>
+<script type="module" src="/static/js/chart.js"></script>
 </html>

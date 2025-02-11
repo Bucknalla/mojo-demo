@@ -15,6 +15,7 @@ type DataPoint struct {
 	Voltage          float64 `json:"voltage"`
 	Temperature      float64 `json:"temperature"`
 	BatteryChemistry string  `json:"battery_chemistry"`
+	USBAlert         bool    `json:"usb_alert"`
 }
 
 var (
@@ -22,6 +23,8 @@ var (
 		CheckOrigin: func(r *http.Request) bool {
 			return true // Allow all origins for demo
 		},
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
 	}
 	clients   = make(map[*websocket.Conn]bool)
 	clientsMu sync.Mutex
@@ -30,7 +33,7 @@ var (
 func main() {
 	r := gin.Default()
 
-	// Serve static files (HTML, JS)
+	// Serve static files and templates
 	r.Static("/static", "./static")
 	r.LoadHTMLGlob("templates/*")
 
@@ -42,7 +45,17 @@ func main() {
 	r.GET("/ws", handleWebSocket)
 	r.POST("/webhook", handleWebhook)
 
-	log.Fatal(r.Run(":8080"))
+	// Check for SSL cert and key
+	certFile := "../ssl/cert.pem" // Update path as needed
+	keyFile := "../ssl/key.pem"   // Update path as needed
+
+	// Try to start with HTTPS
+	if err := r.RunTLS(":8443", certFile, keyFile); err != nil {
+		log.Printf("Failed to start HTTPS server: %v", err)
+		log.Printf("Falling back to HTTP")
+		// Fall back to HTTP if SSL fails
+		log.Fatal(r.Run(":8080"))
+	}
 }
 
 func handleWebSocket(c *gin.Context) {

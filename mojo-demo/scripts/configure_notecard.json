@@ -1,0 +1,5 @@
+{"req":"hub.set","mode":"off"}
+{"req":"card.motion.mode","stop":true}
+{"req":"card.attn","off":true}
+{"req":"card.sleep","on":true}
+{"req":"card.io","uoff":true,"mode":"+busy"}
