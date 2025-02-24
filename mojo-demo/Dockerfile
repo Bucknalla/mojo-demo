@@ -1,35 +1,46 @@
-# Build stage
-FROM balenalib/aarch64-alpine-golang:1.20-build AS builder
+# Start from golang base image
+FROM golang:1.21-alpine as builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy go mod files
+# Install necessary build tools
+RUN apk add --no-cache gcc musl-dev
+
+# Copy go mod and sum files
 COPY go.mod go.sum ./
+
+# Download all dependencies
 RUN go mod download
 
-# Copy source code
+# Copy the source code
 COPY . .
 
 # Build the application
-RUN go build -o server cmd/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -o main ./cmd/main.go
 
-# Run stage
-FROM balenalib/aarch64-alpine-golang:1.20-run
+# Start a new stage from scratch
+FROM alpine:latest
 
-# Set working directory
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/server .
+COPY --from=builder /app/main .
 
 # Copy static files and templates
-COPY --from=builder /app/static ./static
-COPY --from=builder /app/templates ./templates
-COPY --from=builder /app/scripts ./scripts
+COPY static/ ./static/
+COPY templates/ ./templates/
+COPY ssl/ ./ssl/
+
+# Install necessary runtime dependencies
+RUN apk add --no-cache ca-certificates
 
 # Expose port
 EXPOSE 8080
+EXPOSE 8443
 
-# Run the application
-CMD ["./server"]
+# Set environment variable for development mode
+ENV DEV_MODE=true
+
+# Run the binary
+CMD ["./main"]

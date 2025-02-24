@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -34,6 +35,23 @@ var (
 	dataCacheMu sync.RWMutex
 )
 
+// Add authentication middleware
+func basicAuth() gin.HandlerFunc {
+	// Get credentials from environment variables, or use defaults for development
+	username := os.Getenv("MOJO_AUTH_USER")
+	if username == "" {
+		username = "admin"
+	}
+	password := os.Getenv("MOJO_AUTH_PASS")
+	if password == "" {
+		password = "mojo2024"
+	}
+
+	return gin.BasicAuth(gin.Accounts{
+		username: password,
+	})
+}
+
 func main() {
 	r := gin.Default()
 
@@ -41,30 +59,33 @@ func main() {
 	r.Static("/static", "./static")
 	r.LoadHTMLGlob("templates/*")
 
-	// Routes
+	// Public routes
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", nil)
 	})
-
 	r.GET("/ws", handleWebSocket)
-	r.POST("/webhook", handleWebhook)
 
-	// Add reset endpoint
-	r.POST("/api/reset", func(c *gin.Context) {
-		// Clear the data cache
-		dataCacheMu.Lock()
-		dataCache = make([]DataPoint, 0, 20) // Reset to empty cache with same capacity
-		dataCacheMu.Unlock()
+	// Protected routes
+	protected := r.Group("/")
+	protected.Use(basicAuth())
+	{
+		protected.POST("/webhook", handleWebhook)
+		protected.POST("/api/reset", func(c *gin.Context) {
+			// Clear the data cache
+			dataCacheMu.Lock()
+			dataCache = make([]DataPoint, 0, 20)
+			dataCacheMu.Unlock()
 
-		// Clear all client data
-		clientsMu.Lock()
-		for client := range clients {
-			client.WriteJSON(gin.H{"type": "reset"})
-		}
-		clientsMu.Unlock()
+			// Clear all client data
+			clientsMu.Lock()
+			for client := range clients {
+				client.WriteJSON(gin.H{"type": "reset"})
+			}
+			clientsMu.Unlock()
 
-		c.JSON(http.StatusOK, gin.H{"status": "Data reset successfully"})
-	})
+			c.JSON(http.StatusOK, gin.H{"status": "Data reset successfully"})
+		})
+	}
 
 	// Add development flag
 	devMode := true // You might want to make this configurable

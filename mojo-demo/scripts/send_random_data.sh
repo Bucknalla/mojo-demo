@@ -11,6 +11,10 @@ if [ $# -lt 2 ] || [ $# -gt 3 ]; then
     exit 1
 fi
 
+# Get credentials from environment variables or use defaults
+AUTH_USER=${MOJO_AUTH_USER:-admin}
+AUTH_PASS=${MOJO_AUTH_PASS:-mojo2024}
+
 count=$1
 battery_chemistry=$2
 server_url=${3:-"http://localhost:8080"}  # Use third argument if provided, otherwise default to localhost
@@ -72,6 +76,17 @@ esac
 echo "Using voltage range for $battery_chemistry: $min_voltage to $max_voltage"
 echo "Sending data to: $server_url"
 
+# Test authentication first
+auth_test=$(curl -s -k -I -X POST "$server_url/webhook" \
+    -u "${AUTH_USER}:${AUTH_PASS}" \
+    -H "Content-Type: application/json")
+
+if echo "$auth_test" | grep -q "401 Unauthorized"; then
+    echo "Error: Authentication failed. Please check your MOJO_AUTH_USER and MOJO_AUTH_PASS environment variables."
+    echo "Current user: $AUTH_USER"
+    exit 1
+fi
+
 # Start with current timestamp
 base_timestamp=$(date +%s)
 
@@ -90,14 +105,25 @@ for ((i=1; i<=$count; i++)); do
         usb_alert="true"
     fi
 
-    # Send webhook with configurable URL
-    curl -s -X POST "$server_url/webhook" \
+    # Send webhook with authentication and capture response
+    response=$(curl -s -k -w "\n%{http_code}" -X POST "$server_url/webhook" \
+        -u "${AUTH_USER}:${AUTH_PASS}" \
         -H "Content-Type: application/json" \
-        -d "{\"timestamp\":$timestamp,\"milliamp_hours\":$milliamp_hours,\"voltage\":$voltage,\"temperature\":$temperature,\"battery_chemistry\":\"$battery_chemistry\",\"usb_alert\":$usb_alert}"
+        -d "{\"timestamp\":$timestamp,\"milliamp_hours\":$milliamp_hours,\"voltage\":$voltage,\"temperature\":$temperature,\"battery_chemistry\":\"$battery_chemistry\",\"usb_alert\":$usb_alert}")
 
-    # Format timestamp for display
-    formatted_time=$(date -r $timestamp '+%H:%M:%S')
-    echo " - Sent mAh: $milliamp_hours, Voltage: $voltage, Temp: $temperature$(echo -e '\xc2\xb0')C, Battery: $battery_chemistry, USB Alert: $usb_alert at $formatted_time"
+    http_code=$(echo "$response" | tail -n1)
+    response_body=$(echo "$response" | sed '$d')
+
+    if [ "$http_code" == "401" ]; then
+        echo "Error: Authentication failed during data send. Stopping script."
+        exit 1
+    elif [ "$http_code" != "200" ]; then
+        echo "Error: Server returned code $http_code"
+        echo "Response: $response_body"
+        exit 1
+    fi
+
+    echo " - Sent mAh: $milliamp_hours, Voltage: $voltage, Temp: $temperature$(echo -e '\xc2\xb0')C, Battery: $battery_chemistry, USB Alert: $usb_alert at $(date -r $timestamp '+%H:%M:%S')"
 
     sleep 1
 done
