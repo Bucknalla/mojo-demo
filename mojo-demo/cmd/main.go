@@ -28,6 +28,10 @@ var (
 	}
 	clients   = make(map[*websocket.Conn]bool)
 	clientsMu sync.Mutex
+
+	// Add cache for last 20 readings
+	dataCache   = make([]DataPoint, 0, 20)
+	dataCacheMu sync.RWMutex
 )
 
 func main() {
@@ -45,16 +49,40 @@ func main() {
 	r.GET("/ws", handleWebSocket)
 	r.POST("/webhook", handleWebhook)
 
-	// Check for SSL cert and key
-	certFile := "../ssl/cert.pem" // Update path as needed
-	keyFile := "../ssl/key.pem"   // Update path as needed
+	// Add reset endpoint
+	r.POST("/api/reset", func(c *gin.Context) {
+		// Clear the data cache
+		dataCacheMu.Lock()
+		dataCache = make([]DataPoint, 0, 20) // Reset to empty cache with same capacity
+		dataCacheMu.Unlock()
 
-	// Try to start with HTTPS
-	if err := r.RunTLS(":8443", certFile, keyFile); err != nil {
-		log.Printf("Failed to start HTTPS server: %v", err)
-		log.Printf("Falling back to HTTP")
-		// Fall back to HTTP if SSL fails
+		// Clear all client data
+		clientsMu.Lock()
+		for client := range clients {
+			client.WriteJSON(gin.H{"type": "reset"})
+		}
+		clientsMu.Unlock()
+
+		c.JSON(http.StatusOK, gin.H{"status": "Data reset successfully"})
+	})
+
+	// Add development flag
+	devMode := true // You might want to make this configurable
+
+	if devMode {
+		// Use HTTP for development
+		log.Printf("Running in development mode on HTTP")
 		log.Fatal(r.Run(":8080"))
+	} else {
+		// Use HTTPS for production
+		certFile := "./ssl/cert.pem"
+		keyFile := "./ssl/key.pem"
+
+		if err := r.RunTLS(":8443", certFile, keyFile); err != nil {
+			log.Printf("Failed to start HTTPS server: %v", err)
+			log.Printf("Falling back to HTTP")
+			log.Fatal(r.Run(":8080"))
+		}
 	}
 }
 
@@ -69,6 +97,16 @@ func handleWebSocket(c *gin.Context) {
 	clientsMu.Lock()
 	clients[conn] = true
 	clientsMu.Unlock()
+
+	// Send cached data to new client
+	dataCacheMu.RLock()
+	for _, data := range dataCache {
+		if err := conn.WriteJSON(data); err != nil {
+			log.Printf("Failed to send cached data: %v", err)
+			break
+		}
+	}
+	dataCacheMu.RUnlock()
 
 	// Keep connection alive and handle disconnection
 	for {
@@ -88,6 +126,14 @@ func handleWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Update cache
+	dataCacheMu.Lock()
+	dataCache = append(dataCache, data)
+	if len(dataCache) > 20 {
+		dataCache = dataCache[1:] // Remove oldest reading when we exceed 20
+	}
+	dataCacheMu.Unlock()
 
 	// Broadcast new data to all connected clients
 	clientsMu.Lock()

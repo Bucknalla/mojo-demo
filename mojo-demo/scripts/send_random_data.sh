@@ -78,26 +78,26 @@ base_timestamp=$(date +%s)
 for ((i=1; i<=$count; i++)); do
     # Calculate timestamp for this iteration (add i-1 minutes to base timestamp)
     timestamp=$((base_timestamp + ((i-1) * 60)))
-    
+
     # Generate random values with explicit srand() for each calculation
     milliamp_hours=$(awk -v min=1 -v max=100 'BEGIN{srand(); print min+rand()*(max-min)}' | xargs printf "%.2f")
     voltage=$(awk -v min="$min_voltage" -v max="$max_voltage" 'BEGIN{srand(); print min+rand()*(max-min)}' | xargs printf "%.2f")
     temperature=$(awk -v min=20 -v max=40 'BEGIN{srand(); print min+rand()*(max-min)}' | xargs printf "%.2f")
-    
+
     # Generate USB alert based on voltage
     usb_alert="false"
     if [ -n "$usb_voltage" ] && [ $(echo "$voltage >= $usb_voltage - 0.1" | bc -l) -eq 1 ]; then
         usb_alert="true"
     fi
-    
+
     # Send webhook with configurable URL
     curl -s -X POST "$server_url/webhook" \
         -H "Content-Type: application/json" \
         -d "{\"timestamp\":$timestamp,\"milliamp_hours\":$milliamp_hours,\"voltage\":$voltage,\"temperature\":$temperature,\"battery_chemistry\":\"$battery_chemistry\",\"usb_alert\":$usb_alert}"
-    
+
     # Format timestamp for display
     formatted_time=$(date -r $timestamp '+%H:%M:%S')
     echo " - Sent mAh: $milliamp_hours, Voltage: $voltage, Temp: $temperature$(echo -e '\xc2\xb0')C, Battery: $battery_chemistry, USB Alert: $usb_alert at $formatted_time"
-    
+
     sleep 1
 done

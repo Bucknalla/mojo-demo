@@ -13,10 +13,13 @@ let firstDataTime = null;
 
 // Add configuration object at the top
 const config = {
-    wsURL: window.location.protocol === 'https:' ? 
-        `wss://${window.location.host}/ws` : 
+    wsURL: window.location.protocol === 'https:' ?
+        `wss://${window.location.host}/ws` :
         `ws://${window.location.host}/ws`
 };
+
+// Add at the top with other constants
+const resetButton = document.getElementById('reset-data');
 
 // Helper function to create chart configuration
 function createChartConfig(label, color, unit = '', isMAhChart = false) {
@@ -158,6 +161,17 @@ function setupWebSocket() {
 
 function handleWebSocketMessage(event) {
     const data = JSON.parse(event.data);
+
+    // Check if it's a reset message
+    if (data.type === 'reset') {
+        mAhChart.data.datasets[0].data = [];
+        voltageChart.data.datasets[0].data = [];
+        temperatureChart.data.datasets[0].data = [];
+        firstDataTime = null;
+        updateCharts();
+        return;
+    }
+
     const timestamp = new Date(data.timestamp * 1000);
 
     if (!firstDataTime) firstDataTime = timestamp;
@@ -205,12 +219,12 @@ function updateOtherCharts(data, timestamp) {
 }
 
 function removeOldDataPoints() {
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const filterOldPoints = point => new Date(point.x) > fiveMinutesAgo;
+    // Remove data points keeping only the last 20 readings
+    const maxReadings = 20;
 
-    mAhChart.data.datasets[0].data = mAhChart.data.datasets[0].data.filter(filterOldPoints);
-    voltageChart.data.datasets[0].data = voltageChart.data.datasets[0].data.filter(filterOldPoints);
-    temperatureChart.data.datasets[0].data = temperatureChart.data.datasets[0].data.filter(filterOldPoints);
+    mAhChart.data.datasets[0].data = mAhChart.data.datasets[0].data.slice(-maxReadings);
+    voltageChart.data.datasets[0].data = voltageChart.data.datasets[0].data.slice(-maxReadings);
+    temperatureChart.data.datasets[0].data = temperatureChart.data.datasets[0].data.slice(-maxReadings);
 }
 
 function updateCharts() {
@@ -242,6 +256,40 @@ function initializeCharts() {
 document.addEventListener('DOMContentLoaded', () => {
     initializeCharts();
     setupWebSocket();
+
+    // Add reset button handler
+    if (resetButton) {
+        resetButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/reset', {
+                    method: 'POST'
+                });
+
+                if (!response.ok) throw new Error('Failed to reset data');
+
+                // Clear all chart data
+                mAhChart.data.datasets[0].data = [];
+                voltageChart.data.datasets[0].data = [];
+                temperatureChart.data.datasets[0].data = [];
+
+                // Reset first data time
+                firstDataTime = null;
+
+                // Update charts
+                updateCharts();
+
+                // Update status
+                statusDiv.textContent = 'Data reset successfully';
+
+            } catch (error) {
+                console.error('Error resetting data:', error);
+                statusDiv.textContent = 'Error resetting data';
+                statusDiv.className = 'error';
+            }
+        });
+    } else {
+        console.error('Reset button not found in DOM');
+    }
 });
 
 // Simplify the legend HTML creation
