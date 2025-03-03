@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -17,6 +18,10 @@ type DataPoint struct {
 	Temperature      float64 `json:"temperature"`
 	BatteryChemistry string  `json:"battery_chemistry"`
 	USBAlert         bool    `json:"usb_alert"`
+}
+
+type PingMessage struct {
+	Type string `json:"type"`
 }
 
 var (
@@ -33,6 +38,12 @@ var (
 	// Add cache for last 20 readings
 	dataCache   = make([]DataPoint, 0, 20)
 	dataCacheMu sync.RWMutex
+
+	// WebSocket configuration
+	writeWait            = 10 * time.Second
+	pongWait             = 60 * time.Second
+	pingPeriod           = (pongWait * 9) / 10
+	maxMessageSize int64 = 512
 )
 
 // Add authentication middleware
@@ -113,11 +124,26 @@ func handleWebSocket(c *gin.Context) {
 		log.Printf("Failed to upgrade connection: %v", err)
 		return
 	}
-	defer conn.Close()
 
+	// Set connection properties
+	conn.SetReadLimit(maxMessageSize)
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
+	// Register client
 	clientsMu.Lock()
 	clients[conn] = true
 	clientsMu.Unlock()
+
+	defer func() {
+		clientsMu.Lock()
+		delete(clients, conn)
+		clientsMu.Unlock()
+		conn.Close()
+	}()
 
 	// Send cached data to new client
 	dataCacheMu.RLock()
@@ -129,14 +155,39 @@ func handleWebSocket(c *gin.Context) {
 	}
 	dataCacheMu.RUnlock()
 
-	// Keep connection alive and handle disconnection
+	// Start ping ticker
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+
+	// Handle incoming messages
+	go func() {
+		for {
+			var msg PingMessage
+			err := conn.ReadJSON(&msg)
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					log.Printf("WebSocket error: %v", err)
+				}
+				return
+			}
+
+			if msg.Type == "ping" {
+				conn.SetWriteDeadline(time.Now().Add(writeWait))
+				if err := conn.WriteMessage(websocket.PongMessage, nil); err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	// Keep connection alive with ping/pong
 	for {
-		_, _, err := conn.ReadMessage()
-		if err != nil {
-			clientsMu.Lock()
-			delete(clients, conn)
-			clientsMu.Unlock()
-			break
+		select {
+		case <-ticker.C:
+			conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }

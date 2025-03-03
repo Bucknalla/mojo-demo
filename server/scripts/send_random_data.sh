@@ -95,7 +95,7 @@ for ((i=1; i<=$count; i++)); do
     timestamp=$((base_timestamp + ((i-1) * 60)))
 
     # Generate random values with explicit srand() for each calculation
-    milliamp_hours=$(awk -v min=1 -v max=100 'BEGIN{srand(); print min+rand()*(max-min)}' | xargs printf "%.2f")
+    milliamp_hours=$(awk -v min=-25 -v max=25 'BEGIN{srand(); print min+rand()*(max-min)}' | xargs printf "%.2f")
     voltage=$(awk -v min="$min_voltage" -v max="$max_voltage" 'BEGIN{srand(); print min+rand()*(max-min)}' | xargs printf "%.2f")
     temperature=$(awk -v min=20 -v max=40 'BEGIN{srand(); print min+rand()*(max-min)}' | xargs printf "%.2f")
 

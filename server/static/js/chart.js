@@ -10,12 +10,17 @@ const usbAlertDiv = document.getElementById('usb-alert');
 
 let mAhChart, voltageChart, temperatureChart;
 let firstDataTime = null;
+let ws = null;
+let reconnectAttempt = 0;
+const MAX_RECONNECT_DELAY = 5000; // Maximum reconnection delay of 5 seconds
 
 // Add configuration object at the top
 const config = {
     wsURL: window.location.protocol === 'https:' ?
         `wss://${window.location.host}/ws` :
-        `ws://${window.location.host}/ws`
+        `ws://${window.location.host}/ws`,
+    pingInterval: 30000, // Send ping every 30 seconds
+    reconnectInterval: 1000 // Initial reconnection delay of 1 second
 };
 
 // Add at the top with other constants
@@ -23,6 +28,11 @@ const resetButton = document.getElementById('reset-data');
 
 // Helper function to create chart configuration
 function createChartConfig(label, color, unit = '', isMAhChart = false) {
+    const options = createChartOptions(label);
+    if (isMAhChart) {
+        options.scales.y = createYScale(label, false); // Allow negative values for mAh chart
+    }
+
     return {
         type: 'line',
         data: {
@@ -44,7 +54,7 @@ function createChartConfig(label, color, unit = '', isMAhChart = false) {
                 })
             }]
         },
-        options: createChartOptions(label)
+        options: options
     };
 }
 
@@ -99,9 +109,9 @@ function createTimeScale() {
 }
 
 // Helper function for Y scale configuration
-function createYScale(label) {
+function createYScale(label, beginAtZero = true) {
     return {
-        beginAtZero: true,
+        beginAtZero: beginAtZero,
         grid: {
             color: 'rgba(0, 0, 0, 0.05)'
         },
@@ -119,29 +129,42 @@ function createYScale(label) {
 // Helper functions for mAh chart colors
 function getMAhSegmentColor(ctx, defaultColor) {
     if (ctx.p0.parsed && ctx.p1.parsed) {
-        return ctx.p0.parsed.y > ctx.p1.parsed.y ?
-            '#ef4444' :  // Red for discharging
-            '#10b981';   // Green for charging
+        return ctx.p0.parsed.y < ctx.p1.parsed.y ?
+            '#ef4444' :  // Red for discharging (value increasing)
+            '#10b981';   // Green for charging (value decreasing)
     }
     return defaultColor;
 }
 
 function getMAhSegmentBgColor(ctx, defaultColor) {
     if (ctx.p0.parsed && ctx.p1.parsed) {
-        return ctx.p0.parsed.y > ctx.p1.parsed.y ?
-            '#ef444419' :  // Red with opacity for discharging
-            '#10b98119';   // Green with opacity for charging
+        return ctx.p0.parsed.y < ctx.p1.parsed.y ?
+            '#ef444419' :  // Red with opacity for discharging (value increasing)
+            '#10b98119';   // Green with opacity for charging (value decreasing)
     }
     return `${defaultColor}1a`;
 }
 
 // WebSocket handlers
 function setupWebSocket() {
-    const ws = new WebSocket(config.wsURL);
+    if (ws) {
+        ws.close();
+    }
+
+    ws = new WebSocket(config.wsURL);
+    let pingInterval;
 
     ws.onopen = () => {
         statusDiv.textContent = 'Connected to server';
         statusDiv.className = 'connected';
+        reconnectAttempt = 0; // Reset reconnection attempts
+
+        // Start sending pings
+        pingInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, config.pingInterval);
     };
 
     ws.onmessage = handleWebSocketMessage;
@@ -154,8 +177,21 @@ function setupWebSocket() {
 
     ws.onclose = () => {
         console.log('WebSocket connection closed');
-        statusDiv.textContent = 'Disconnected from server';
+        statusDiv.textContent = 'Disconnected from server - Reconnecting...';
         statusDiv.className = 'error';
+
+        // Clear ping interval
+        if (pingInterval) {
+            clearInterval(pingInterval);
+        }
+
+        // Implement exponential backoff for reconnection
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), MAX_RECONNECT_DELAY);
+        reconnectAttempt++;
+
+        setTimeout(() => {
+            setupWebSocket();
+        }, delay);
     };
 }
 
@@ -169,6 +205,7 @@ function handleWebSocketMessage(event) {
         temperatureChart.data.datasets[0].data = [];
         firstDataTime = null;
         updateCharts();
+        usbAlertDiv.classList.add('hidden');  // Hide USB alert on reset
         return;
     }
 
@@ -277,6 +314,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Update charts
                 updateCharts();
+
+                // Hide USB alert
+                usbAlertDiv.classList.add('hidden');
 
                 // Update status
                 statusDiv.textContent = 'Data reset successfully';
